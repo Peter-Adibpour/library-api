@@ -1,0 +1,9 @@
+[project]
+name = "library-api"
+version = "1.0.0"
+description="Manage library members and their borrowed books. Assignment 1 API demonstrating FastAPI routes, Pydantic validation, and OpenAPI contracts."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.116.0",
+]
