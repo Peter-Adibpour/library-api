@@ -1,113 +1,50 @@
 """HTTP endpoints for the Book resource."""
 
-from fastapi import APIRouter, HTTPException, Response, status
-
-from app.routers.members import find_member
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
 from app.schemas.books import BookInput, BookResponse
-from app.storage import books
+from app.services.interfaces import BookServiceAbstraction
 
 router = APIRouter(prefix="/books", tags=["Books"])
 
-def find_book(book_id: int) -> BookResponse:
-    """Find one book or return an HTTP 404 error to the client."""
-    for book in books:
-        if book.id == book_id:
-            return book
+def get_book_service(request: Request) -> BookServiceAbstraction:
+    """Extract the active book service from application state."""
+    return request.app.state.book_service
 
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Book not found",
-    )
+@router.get("", response_model=list[BookResponse])
+def list_books(service: BookServiceAbstraction = Depends(get_book_service)):
+    return service.get_books()
 
-def check_isbn_uniqueness(isbn: str, exclude_id: int = None) -> None:
-    """Verify that the ISBN is unique."""
-    for book in books:
-        if book.id != exclude_id and book.isbn == isbn:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="ISBN already exists"
-            )
+@router.get("/{book_id}", response_model=BookResponse)
+def get_book(book_id: int, service: BookServiceAbstraction = Depends(get_book_service)):
+    try:
+        return service.get_book_by_id(book_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-@router.get(
-    "",
-    response_model=list[BookResponse],
-    summary="List all books",
-    description="Return every book currently stored by the application.",
-)
-def list_books() -> list[BookResponse]:
-    """Return every book currently stored in memory."""
-    return books
+@router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
+def create_book(data: BookInput, service: BookServiceAbstraction = Depends(get_book_service)):
+    try:
+        return service.create_book(data)
+    except ValueError as e:
+        if "member does not exist" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-@router.get(
-    "/{book_id}",
-    response_model=BookResponse,
-    summary="Get one book",
-    description="Return the book identified by the path parameter.",
-    responses={404: {"description": "Book not found"}},
-)
-def get_book(book_id: int) -> BookResponse:
-    """Return the book with the requested ID."""
-    return find_book(book_id)
+@router.put("/{book_id}", response_model=BookResponse)
+def replace_book(book_id: int, data: BookInput, service: BookServiceAbstraction = Depends(get_book_service)):
+    try:
+        return service.replace_book(book_id, data)
+    except ValueError as e:
+        if "book not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        if "member does not exist" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-@router.post(
-    "",
-    response_model=BookResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a book",
-    description="Create a book and associate it with an existing member.",
-    responses={
-        404: {"description": "Related member not found"},
-        409: {"description": "ISBN conflict"}
-    },
-)
-def create_book(data: BookInput) -> BookResponse:
-    """Create a book associated with an existing member."""
-    find_member(data.member_id)
-    check_isbn_uniqueness(data.isbn)
-    next_book_id = max((book.id for book in books), default=0) + 1
-
-    book = BookResponse(
-        id=next_book_id,
-        **data.model_dump(),
-    )
-    books.append(book)
-    return book
-
-@router.put(
-    "/{book_id}",
-    response_model=BookResponse,
-    summary="Replace a book",
-    description="Replace all editable fields and verify the related member.",
-    responses={
-        404: {"description": "Book or related member not found"},
-        409: {"description": "ISBN conflict"}
-    },
-)
-def replace_book(
-    book_id: int,
-    data: BookInput,
-) -> BookResponse:
-    """Replace an existing book after checking its related member."""
-    book = find_book(book_id)
-    find_member(data.member_id)
-    check_isbn_uniqueness(data.isbn, exclude_id=book_id)
-    
-    updated_book = BookResponse(
-        id=book_id,
-        **data.model_dump(),
-    )
-    books[books.index(book)] = updated_book
-    return updated_book
-
-@router.delete(
-    "/{book_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a book",
-    description="Delete the book identified by the path parameter.",
-    responses={404: {"description": "Book not found"}},
-)
-def delete_book(book_id: int) -> Response:
-    """Remove a book from the in-memory collection."""
-    book = find_book(book_id)
-    books.remove(book)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_book(book_id: int, service: BookServiceAbstraction = Depends(get_book_service)):
+    try:
+        service.delete_book(book_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

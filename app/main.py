@@ -1,33 +1,35 @@
 """FastAPI application for the Library Management System API."""
 
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
 
-from app.routers.books import router as books_router
+from app.config import settings
+from app.database import SessionLocal
 from app.routers.members import router as members_router
+from app.routers.books import router as books_router
 
-tags_metadata = [
-    {
-        "name": "General",
-        "description": "Basic application information and health checks.",
-    },
-    {
-        "name": "Members",
-        "description": "Create and manage library members and view their borrowed books.",
-    },
-    {
-        "name": "Books",
-        "description": "Create and manage books that are borrowed by members.",
-    },
-]
+# Import both sets of service implementations
+from app.services.database import DatabaseMemberService, DatabaseBookService
+from app.services.memory import InMemoryMemberService, InMemoryBookService
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load the selected storage backend at startup."""
+    if settings.storage_backend == "database":
+        # Pass the session factory to the database services
+        app.state.member_service = DatabaseMemberService(SessionLocal)
+        app.state.book_service = DatabaseBookService(SessionLocal)
+    else:
+        # Instantiate the temporary memory services
+        app.state.member_service = InMemoryMemberService()
+        app.state.book_service = InMemoryBookService()
+    yield
 
 app = FastAPI(
     title="Library Management System API",
-    description=(
-        "Manage library members and their borrowed books. Assignment 1 API "
-        "demonstrating FastAPI routes, Pydantic validation, and OpenAPI contracts."
-    ),
-    version="1.0.0",
-    openapi_tags=tags_metadata,
+    description="Assignment 2 API demonstrating layered design and PostgreSQL persistence.",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 app.include_router(members_router)
