@@ -1,16 +1,17 @@
 # Library Management System API
 
-The Library Management System API is a backend for managing library Members and their borrowed Books. Users can create, view, update, and delete both resources, and each Book is borrowed by exactly one Member. 
+The Library Management System API is a backend for managing library Members and their borrowed Books. Users can create, view, update, and delete both resources, and each Book is borrowed by exactly one Member.
 
 This repository contains the Assignment 2 submission, demonstrating a layered architectural design, dependency injection, and PostgreSQL persistence using SQLAlchemy.
 
 ## Architecture and Storage Backends
 
-This API separates HTTP routing, business logic (Services), and database queries (Repositories) into distinct layers. 
+This API separates HTTP routing, business logic (Services), and database queries (Repositories) into distinct layers.
 
 It supports two interchangeable storage backends configured via environment variables:
-*   `database`: (Default) Persists data to a PostgreSQL database using SQLAlchemy. Data survives application restarts.
-*   `memory`: Stores data in temporary Python lists. Data is lost when the application restarts.
+
+* `database`: (Default) Persists data to a PostgreSQL database using SQLAlchemy. Data survives application restarts.
+* `memory`: Stores data in temporary Python lists. Data is lost when the application restarts.
 
 ## Prerequisites and Database Setup
 
@@ -31,19 +32,23 @@ Ensure `uv` is installed, then run:
 
 ```text
 uv sync
+```
+
 ## Run the API
 
-## Start the development server using Uvicorn:
+Start the development server using Uvicorn:
 
+```bash
 uv run uvicorn app.main:app --reload
+```
 
-The server will run at http://localhost:8000.
+The server will run at <http://localhost:8000>.
 
 ## API Documentation
 
 Once the server is running, explore the interactive OpenAPI documentation:
 
-    Swagger UI: http://localhost:8000/docs
+    Swagger UI: <http://localhost:8000/docs>
 
     ReDoc: http://localhost:8000/redoc
 
