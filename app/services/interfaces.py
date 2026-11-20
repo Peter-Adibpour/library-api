@@ -12,6 +12,10 @@ class MemberServiceAbstraction(ABC):
         pass
 
     @abstractmethod
+    def get_member_books(self, member_id: int):
+        pass
+
+    @abstractmethod
     def create_member(self, data):
         pass
 

@@ -13,5 +13,5 @@ class DuplicateResourceError(LibraryException):
     pass
 
 class BusinessRuleError(LibraryException):
-    """Raised when an operation violates a business rule (e.g., deleting a member with books)."""
+    """Raised when an operation violates a business rule."""
     pass

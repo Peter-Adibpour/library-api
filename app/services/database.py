@@ -3,6 +3,7 @@
 from app.services.interfaces import MemberServiceAbstraction, BookServiceAbstraction
 from app.repositories import MemberRepository, BookRepository
 from app.models import Member, Book
+from app.exceptions import ResourceNotFoundError, DuplicateResourceError, BusinessRuleError
 
 class DatabaseMemberService(MemberServiceAbstraction):
     def __init__(self, session_factory):
@@ -18,14 +19,22 @@ class DatabaseMemberService(MemberServiceAbstraction):
             repo = MemberRepository(session)
             member = repo.get_by_id(member_id)
             if not member:
-                raise ValueError("Member not found")
+                raise ResourceNotFoundError(f"Member {member_id} not found")
             return member
+
+    def get_member_books(self, member_id: int):
+        with self.session_factory() as session:
+            repo = MemberRepository(session)
+            member = repo.get_by_id(member_id)
+            if not member:
+                raise ResourceNotFoundError(f"Member {member_id} not found")
+            return member.books
 
     def create_member(self, data):
         with self.session_factory() as session:
             repo = MemberRepository(session)
             if repo.get_by_email_or_membership(data.email, data.membership_id):
-                raise ValueError("Email or Membership ID already exists")
+                raise DuplicateResourceError("Email or Membership ID already exists")
 
             new_member = Member(**data.model_dump())
             
@@ -43,11 +52,11 @@ class DatabaseMemberService(MemberServiceAbstraction):
             repo = MemberRepository(session)
             member = repo.get_by_id(member_id)
             if not member:
-                raise ValueError("Member not found")
+                raise ResourceNotFoundError(f"Member {member_id} not found")
             
             existing = repo.get_by_email_or_membership(data.email, data.membership_id)
             if existing and existing.id != member_id:
-                raise ValueError("Email or Membership ID already exists")
+                raise DuplicateResourceError("Email or Membership ID already exists")
 
             for key, value in data.model_dump().items():
                 setattr(member, key, value)
@@ -65,9 +74,9 @@ class DatabaseMemberService(MemberServiceAbstraction):
             repo = MemberRepository(session)
             member = repo.get_by_id(member_id)
             if not member:
-                raise ValueError("Member not found")
+                raise ResourceNotFoundError(f"Member {member_id} not found")
             if member.books:
-                raise ValueError("Cannot delete member with associated books")
+                raise BusinessRuleError("Cannot delete member with associated books")
                 
             try:
                 repo.delete(member)
@@ -90,7 +99,7 @@ class DatabaseBookService(BookServiceAbstraction):
             repo = BookRepository(session)
             book = repo.get_by_id(book_id)
             if not book:
-                raise ValueError("Book not found")
+                raise ResourceNotFoundError(f"Book {book_id} not found")
             return book
 
     def create_book(self, data):
@@ -99,10 +108,10 @@ class DatabaseBookService(BookServiceAbstraction):
             book_repo = BookRepository(session)
             
             if not member_repo.get_by_id(data.member_id):
-                raise ValueError("Associated member does not exist")
+                raise ResourceNotFoundError("Associated member does not exist")
             
             if book_repo.get_by_isbn(data.isbn):
-                raise ValueError("ISBN already exists")
+                raise DuplicateResourceError("ISBN already exists")
 
             new_book = Book(**data.model_dump())
             
@@ -122,14 +131,14 @@ class DatabaseBookService(BookServiceAbstraction):
             
             book = book_repo.get_by_id(book_id)
             if not book:
-                raise ValueError("Book not found")
+                raise ResourceNotFoundError(f"Book {book_id} not found")
                 
             if not member_repo.get_by_id(data.member_id):
-                raise ValueError("Associated member does not exist")
+                raise ResourceNotFoundError("Associated member does not exist")
                 
             existing_isbn = book_repo.get_by_isbn(data.isbn)
             if existing_isbn and existing_isbn.id != book_id:
-                raise ValueError("ISBN already exists")
+                raise DuplicateResourceError("ISBN already exists")
 
             for key, value in data.model_dump().items():
                 setattr(book, key, value)
@@ -147,7 +156,7 @@ class DatabaseBookService(BookServiceAbstraction):
             repo = BookRepository(session)
             book = repo.get_by_id(book_id)
             if not book:
-                raise ValueError("Book not found")
+                raise ResourceNotFoundError(f"Book {book_id} not found")
                 
             try:
                 repo.delete(book)

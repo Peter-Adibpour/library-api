@@ -1,11 +1,16 @@
 """HTTP endpoints for the Book resource."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Response, status, Request
 from app.schemas.books import BookInput, BookResponse
 from app.services.interfaces import BookServiceAbstraction
-from app.auth import require_admin, get_current_role
+from app.exceptions import ResourceNotFoundError, DuplicateResourceError
+from app.auth import get_current_role, require_admin
 
-router = APIRouter(prefix="/books", tags=["Books"])
+router = APIRouter(
+    prefix="/books",
+    tags=["Books"],
+    responses={401: {"description": "Unauthorized"}},
+)
 
 def get_book_service(request: Request) -> BookServiceAbstraction:
     """Extract the active book service from application state."""
@@ -14,56 +19,84 @@ def get_book_service(request: Request) -> BookServiceAbstraction:
 @router.get("", response_model=list[BookResponse])
 def list_books(
     service: BookServiceAbstraction = Depends(get_book_service),
-    role: str = Depends(get_current_role)
+    role: str = Depends(get_current_role),
 ):
     return service.get_books()
 
-@router.get("/{book_id}", response_model=BookResponse)
+@router.get(
+    "/{book_id}",
+    response_model=BookResponse,
+    responses={404: {"description": "Not Found"}},
+)
 def get_book(
-    book_id: int, service: BookServiceAbstraction = Depends(get_book_service),
-    role: str = Depends(get_current_role)
+    book_id: int = Path(..., ge=1, le=2147483647),  # Valid range for a 32-bit signed integer
+    service: BookServiceAbstraction = Depends(get_book_service),
+    role: str = Depends(get_current_role),
 ):
     try:
         return service.get_book_by_id(book_id)
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-@router.post("", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=BookResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: {"description": "Forbidden"},
+        404: {"description": "Associated member not found"},
+        409: {"description": "Duplicate resource"},
+    },
+)
 def create_book(
-    data: BookInput, 
+    data: BookInput,
     service: BookServiceAbstraction = Depends(get_book_service),
-    role: str = Depends(require_admin)
+    role: str = Depends(require_admin),
 ):
     try:
         return service.create_book(data)
-    except ValueError as e:
-        if "member does not exist" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except DuplicateResourceError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-@router.put("/{book_id}", response_model=BookResponse)
+@router.put(
+    "/{book_id}",
+    response_model=BookResponse,
+    responses={
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+        409: {"description": "Conflict"},
+    },
+)
 def replace_book(
-    book_id: int, 
-    data: BookInput, service: BookServiceAbstraction = Depends(get_book_service),
-    role: str = Depends(require_admin)
+    book_id: int = Path(..., ge=1, le=2147483647),  # Valid range for a 32-bit signed integer
+    data: BookInput = ...,
+    service: BookServiceAbstraction = Depends(get_book_service),
+    role: str = Depends(require_admin),
 ):
     try:
         return service.replace_book(book_id, data)
-    except ValueError as e:
-        if "book not found" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-        if "member does not exist" in str(e).lower():
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except DuplicateResourceError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
-@router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{book_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        403: {"description": "Forbidden"},
+        404: {"description": "Not Found"},
+    },
+)
 def delete_book(
-    book_id: int, 
+    book_id: int = Path(..., ge=1, le=2147483647),  # Valid range for a 32-bit signed integer
     service: BookServiceAbstraction = Depends(get_book_service),
-    role: str = Depends(require_admin)
+    role: str = Depends(require_admin),
 ):
     try:
         service.delete_book(book_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    except ValueError as e:
+    except ResourceNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
